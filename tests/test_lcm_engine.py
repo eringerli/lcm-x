@@ -11519,14 +11519,12 @@ class TestEngineCompress:
         assert summary_block["role"] == "user"
 
     def test_assemble_context_emits_one_message_per_frontier_node(self, engine):
-        """#cache-prefix: each uncondensed frontier node is its own emitted message.
+        """Each uncondensed frontier node is its own emitted message.
 
         A single joined blob re-prefills the whole summary prefix on every
         compaction because appending one node changes the joined string. One
         message per node keeps the stable nodes byte-identical (provider
         prompt-cache hit) and re-prefills only the newest node + fresh tail.
-        The regression fails on the base: the base joins parts with a separator
-        into one message, so two distinct nodes never appear as two messages.
         """
         for content, created in (("alpha frontier summary", 1.0), ("bravo frontier summary", 2.0)):
             engine._dag.add_node(SummaryNode(
@@ -11540,14 +11538,11 @@ class TestEngineCompress:
 
         summaries = [m for m in result if isinstance(m.get("content"), str) and "frontier summary" in m["content"]]
         assert len(summaries) == 2, f"expected one message per node, got {len(summaries)}"
-        # No joined blob: no single message carries both nodes.
         assert not any("alpha" in m["content"] and "bravo" in m["content"] for m in summaries)
-        # Chronological: oldest node first (stable prefix grows at the end).
         assert "alpha frontier summary" in summaries[0]["content"]
         assert "bravo frontier summary" in summaries[1]["content"]
         assert all(m["role"] == "user" for m in summaries)
 
-        # A newer node appended: the two prior messages stay byte-identical.
         engine._dag.add_node(SummaryNode(
             session_id=engine._session_id, depth=0, summary="charlie frontier summary",
             token_count=30, source_token_count=4000, source_ids=[], source_type="messages", created_at=3.0,
