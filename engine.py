@@ -8590,6 +8590,7 @@ class LCMEngine(
                     summary_parts.append(_summary_part_text(node))
 
         retained_generated_context_parts: list[str] = []
+        summary_messages: list[Dict[str, Any]] = []
         summary_message: Optional[Dict[str, Any]] = None
         if summary_parts:
             if (
@@ -8641,19 +8642,20 @@ class LCMEngine(
             active_summary_node_ids.update(
                 part_keys[i][1] for i in kept_indexes if part_keys[i][1] is not None)
             if selected_parts:
-                combined = "\n\n---\n\n".join(selected_parts)
                 if retained_user_msg is not None:
-                    retained_generated_context_parts.append(combined)
+                    retained_generated_context_parts.append("\n\n---\n\n".join(selected_parts))
                 else:
-                    summary_message = {"role": summary_role, "content": combined}
-                    result.append(summary_message)
-                    summary_candidate = {
-                        "kind": "objective" if combined.lstrip().startswith(_PRESERVED_OBJECTIVE_CONTEXT_PREFIX) else "summary",
-                        "span": combined,
-                        "full_identity": _emission_identity(summary_message),
-                        "row": summary_message,
-                    }
-                    emission_candidates.append(summary_candidate)
+                    for part in selected_parts:
+                        msg = {"role": "user", "content": part, "_compressed_summary": True}
+                        result.append(msg)
+                        summary_messages.append(msg)
+                        emission_candidates.append({
+                            "kind": "objective" if part.lstrip().startswith(_PRESERVED_OBJECTIVE_CONTEXT_PREFIX) else "summary",
+                            "span": part,
+                            "full_identity": _emission_identity(msg),
+                            "row": msg,
+                        })
+                    summary_message = summary_messages[-1]
 
         # Proactive memory injection (SPEC F, default-off). One bounded block is
         # placed adjacent to the summary prefix — a stable position below the
@@ -8763,8 +8765,9 @@ class LCMEngine(
                         "row": carrier,
                     })
                 tail_selected = tail_selected[1:]
-        self._mint_assembled_engine_uids(result, emission_candidates, summary_message, carried_tail,
-                                         proactive_msg, generated_context_row, tail_selected)
+        self._mint_assembled_engine_uids(result, emission_candidates,
+                                         summary_messages or ([summary_message] if summary_message else []),
+                                         carried_tail, proactive_msg, generated_context_row, tail_selected)
         result.extend(tail_selected)
 
         generated_rows = [row for row in result if any(row is source for source in
@@ -8843,7 +8846,7 @@ class LCMEngine(
         self._kept_reply_mark = (result, kept_reply["tokens"]) if kept_reply is not None else None
         return result
 
-    def _mint_assembled_engine_uids(self, result, candidates, summary_message, carried_tail, recall_row,
+    def _mint_assembled_engine_uids(self, result, candidates, summary_messages, carried_tail, recall_row,
                                     context_row, tail_selected) -> None:
         """B2 (R4-1, R3-5 site 2; B1's gate): engine uids on the rows this assembly generated, in emitted order.
         A carrier keeps the summary's uid and absorbs the tail user row's identity as the host's
@@ -8852,11 +8855,11 @@ class LCMEngine(
             return
         carrier = result[-1] if carried_tail is not None else None
         specs: dict = {}
-        if summary_message is not None:
-            content = summary_message["content"]
+        for sm in summary_messages:
+            content = sm["content"]
             kind = "objective" if content.lstrip().startswith(_PRESERVED_OBJECTIVE_CONTEXT_PREFIX) else "summary"
-            specs[id(carrier or summary_message)] = (kind, hashlib.sha256(content.encode("utf-8")).hexdigest(),
-                                                     "carrier" if carrier is not None else kind)
+            specs[id(sm)] = (kind, hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                             "carrier" if sm is carrier else kind)
         if recall_row is not None:
             specs[id(recall_row)] = ("recall", None, "recall")
         if context_row is not None:
