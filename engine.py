@@ -633,12 +633,24 @@ def _condensation_source_text(nodes) -> str:
 _SUMMARY_DEPTH_LABELS = {0: "Recent", 1: "Session Arc", 2: "Durable"}
 
 
+def _summary_body_without_expand_line(summary: str) -> str:
+    """Strip the trailing 'Expand for details about:' line(s) that the
+    summarizer emits inside node.summary. Context assembly appends the canonical
+    '[Expand for details: ...]' footer itself, so keeping both rendered a duplicate
+    line in every frontier part (and cost tokens). Only trailing lines are removed;
+    an expand mention mid-body is content and survives."""
+    lines = summary.split("\n")
+    while lines and lines[-1].strip().startswith("Expand for details"):
+        lines.pop()
+    return "\n".join(lines).rstrip()
+
+
 def _summary_part_text(node) -> str:
     """One frontier node as context assembly renders it in the summary prefix."""
     label = _SUMMARY_DEPTH_LABELS.get(node.depth, f"Depth-{node.depth}")
     return (
         f"[{label} Summary (d{node.depth}, node {node.node_id})]\n"
-        f"{node.summary}\n"
+        f"{_summary_body_without_expand_line(node.summary)}\n"
         f"[Expand for details: {node.expand_hint}]"
     )
 
@@ -6170,7 +6182,7 @@ class LCMEngine(
             label = {0: "Recent", 1: "Session Arc", 2: "Durable"}.get(node.depth, f"Depth-{node.depth}")
             part = (
                 f"[{label} Summary (d{node.depth}, node {node.node_id})]\n"
-                f"{node.summary}\n[Expand for details: {node.expand_hint}]"
+                f"{_summary_body_without_expand_line(node.summary)}\n[Expand for details: {node.expand_hint}]"
             )
             if not content.startswith(part, pos):
                 return None, []

@@ -1656,14 +1656,15 @@ def test_lcm_doctor_summary_quality_flags_zero_token_large_source(engine):
 
 def _real_lcm_summary(engine, session_id, summary, expand_hint, depth=0):
     """Render an LCM summary part backed by a real DAG node. Reconciliation treats
-    only DAG-verified summaries as scaffold; unverified summary text is content (#486)."""
+    only DAG-verified summaries as scaffold; unverified summary text is content (#486).
+    Uses the engine's own renderer so test fixtures never drift from assembly output."""
     node_id = engine._dag.add_node(SummaryNode(
         session_id=session_id, depth=depth, summary=summary, token_count=5,
         source_token_count=5, source_ids=[], source_type="messages",
         created_at=time.time(), expand_hint=expand_hint,
     ))
-    label = {0: "Recent", 1: "Session Arc", 2: "Durable"}.get(depth, f"Depth-{depth}")
-    return f"[{label} Summary (d{depth}, node {node_id})]\n{summary}\n[Expand for details: {expand_hint}]"
+    from hermes_lcm.engine import _summary_part_text
+    return _summary_part_text(engine._dag.get_node(node_id))
 
 class TestEscalationStripReasoning:
     """Regression tests for thinking-model reasoning-tag stripping in
@@ -11414,11 +11415,7 @@ class TestEngineCompress:
 
         monkeypatch.setattr(lcm_engine, "summarize_with_escalation", fail_summary)
 
-        active_summary_marker = (
-            f"[Recent Summary (d0, node {node_id})]\n"
-            f"{summary_text}\n"
-            "[Expand for details: backed prior]"
-        )
+        active_summary_marker = lcm_engine._summary_part_text(instance._dag.get_node(node_id))
         messages = [
             {"role": "user", "content": active_summary_marker},
             {"role": "user", "content": "fresh tail question"},
