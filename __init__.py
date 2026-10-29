@@ -542,7 +542,6 @@ def register(ctx):
         use_cold_lcm_engine,
         use_lcm_engine,
     )
-    from .tool_registry import TOOL_REGISTRY
 
     # A separate pre-rename copy (plugin ``hermes-lcm``) that loaded first owns
     # the context-engine slot. Registering our hooks too would make two
@@ -700,7 +699,7 @@ def register(ctx):
     # names through the plugin registry (Path A) on message-blind hosts would
     # shadow Path B and lose current-turn ingest, so the Path B fallback is the
     # expected healthy behavior there.
-    _TOOLS = [(spec.name, spec.schema, spec.emoji) for spec in TOOL_REGISTRY]
+    _TOOLS = [(spec.name, spec.schema, spec.emoji) for spec in engine._active_tool_registry()]
     if getattr(engine._config, "recall_delivery_unit", "hits") == "session":
         from .recall_session import session_schema
         _TOOLS = [(name, session_schema(schema), emoji) for name, schema, emoji in _TOOLS]

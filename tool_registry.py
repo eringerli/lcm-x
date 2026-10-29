@@ -34,3 +34,23 @@ TOOL_REGISTRY = (
     ToolSpec("lcm_doctor", schemas.LCM_DOCTOR, "lcm_doctor", "🏥", None),
     ToolSpec("lcm_memory", schemas.LCM_MEMORY, "lcm_memory", "🗂️", "entities_enabled"),
 )
+
+
+# Consolidated 10-tool registry (gated by LCM_SIMPLIFIED_TOOL_SCHEMAS). Merges
+# diagnostics (status/inspect/doctor), evidence (pack/compile), assertions
+# (query_state/memory), and expand (expand/expand_query); reduces grep/recall
+# params. Schemas come from the SIMPLIFIED_SCHEMAS container in schemas.py;
+# handler names route to dispatcher wrappers in tools.py. lcm_retrieve is
+# intentionally absent (adaptive retrieval stays on the full registry).
+TOOL_REGISTRY_SIMPLIFIED = (
+    ToolSpec("lcm_grep", schemas.SIMPLIFIED_SCHEMAS["lcm_grep"], "lcm_grep_simplified", "🔍", None),
+    ToolSpec("lcm_recall", schemas.SIMPLIFIED_SCHEMAS["lcm_recall"], "lcm_recall_simplified", "🧠", None),
+    ToolSpec("lcm_assertions", schemas.SIMPLIFIED_SCHEMAS["lcm_assertions"], "lcm_assertions_unified", "🧾", "assertions_enabled"),
+    ToolSpec("lcm_compute", schemas.SIMPLIFIED_SCHEMAS["lcm_compute"], "lcm_compute", "🧮", None),
+    ToolSpec("lcm_evidence", schemas.SIMPLIFIED_SCHEMAS["lcm_evidence"], "lcm_evidence_unified", "📦", None),
+    ToolSpec("lcm_recent", schemas.SIMPLIFIED_SCHEMAS["lcm_recent"], "lcm_recent", "🕒", None),
+    ToolSpec("lcm_load_session", schemas.SIMPLIFIED_SCHEMAS["lcm_load_session"], "lcm_load_session", "📋", None),
+    ToolSpec("lcm_describe", schemas.SIMPLIFIED_SCHEMAS["lcm_describe"], "lcm_describe", "📊", None),
+    ToolSpec("lcm_expand", schemas.SIMPLIFIED_SCHEMAS["lcm_expand"], "lcm_expand_unified", "🔎", None),
+    ToolSpec("lcm_diagnostics", schemas.SIMPLIFIED_SCHEMAS["lcm_diagnostics"], "lcm_diagnostics", "💚", None),
+)

@@ -898,6 +898,9 @@ ENV_FIELD_SPECS: tuple[_EnvFieldSpec, ...] = (
         "adaptive_retrieval_enabled", "LCM_ADAPTIVE_RETRIEVAL_ENABLED", bool
     ),
     _EnvFieldSpec(
+        "simplified_tool_schemas", "LCM_SIMPLIFIED_TOOL_SCHEMAS", bool
+    ),
+    _EnvFieldSpec(
         "assertion_extraction_enabled", "LCM_ASSERTION_EXTRACTION_ENABLED", bool
     ),
     _EnvFieldSpec("assertion_extraction_model", "LCM_ASSERTION_EXTRACTION_MODEL", str),
@@ -1160,6 +1163,10 @@ class LCMConfig:
     # binds the same-database query-view store needed for warm evidence reuse.
     # The controller itself never invokes a model or provider.
     adaptive_retrieval_enabled: bool = False
+    # Injects the consolidated 10-tool registry (merged diagnostics/evidence/
+    # expand, reduced grep/recall params) instead of the full 16-tool set.
+    # Default off: the original tool names and signatures are injected.
+    simplified_tool_schemas: bool = False
     # Enables the separate structured exact-row extractor. Default off: merely
     # enabling the assertion store never performs a model/provider call.
     assertion_extraction_enabled: bool = False

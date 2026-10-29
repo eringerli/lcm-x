@@ -127,7 +127,7 @@ from .assertion_store import AssertionStore, SourceSnapshot
 from .entity_store import EntityStore
 from .adaptive_retrieval import AdaptiveRetrievalRegistry
 from .query_view_store import QueryViewStore
-from .tool_registry import TOOL_REGISTRY
+from .tool_registry import TOOL_REGISTRY, TOOL_REGISTRY_SIMPLIFIED
 from .sanitize import (
     _clean_active_assistant_message,
     _should_drop_active_assistant_message,
@@ -6039,9 +6039,15 @@ class LCMEngine(
             return 0
         return self.carry_over_new_session_context(old_session_id, new_session_id)
 
+    def _active_tool_registry(self):
+        """Registry selected by LCM_SIMPLIFIED_TOOL_SCHEMAS (10 merged tools) or the full 16."""
+        if getattr(getattr(self, "_config", None), "simplified_tool_schemas", False):
+            return TOOL_REGISTRY_SIMPLIFIED
+        return TOOL_REGISTRY
+
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
         disabled = self._omitted_tool_names()
-        schemas = [spec.schema for spec in TOOL_REGISTRY]
+        schemas = [spec.schema for spec in self._active_tool_registry()]
         if getattr(getattr(self, "_config", None), "recall_delivery_unit", "hits") == "session":
             from .recall_session import session_schema
             schemas = [session_schema(s) for s in schemas]
@@ -6052,7 +6058,7 @@ class LCMEngine(
     def _omitted_tool_names(self) -> set[str]:
         """Hide explicitly disabled and flag-dormant tools on both host paths."""
         omitted = self._disabled_tool_names()
-        for spec in TOOL_REGISTRY:
+        for spec in self._active_tool_registry():
             if spec.dormant_unless and not getattr(self._config, spec.dormant_unless):
                 omitted.add(spec.name)
         return omitted
@@ -6086,7 +6092,7 @@ class LCMEngine(
                     self._record_ingest_failure("tool-call ingest", e)
 
         handlers = {
-            spec.name: getattr(lcm_tools, spec.handler_name) for spec in TOOL_REGISTRY
+            spec.name: getattr(lcm_tools, spec.handler_name) for spec in self._active_tool_registry()
         }
         handler = handlers.get(name)
         if handler:

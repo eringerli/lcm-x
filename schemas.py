@@ -1275,3 +1275,517 @@ LCM_MEMORY = {
         "required": ["action"],
     },
 }
+
+
+# =============================================================================
+# Simplified tool schemas (gated by LCM_SIMPLIFIED_TOOL_SCHEMAS, default off)
+# Consolidate 16 tools into 10: merged diagnostics/evidence/assertions/expand,
+# reduced grep/recall params. The original LCM_* schemas above remain for OFF
+# mode. Kept in a single SIMPLIFIED_SCHEMAS container (keyed by tool name) so
+# the module-level LCM_* namespace stays exactly the 16 public schemas that the
+# plugin.yaml contract pins — simplified names overlap OFF-mode names, so they
+# must not shadow module attributes.
+# =============================================================================
+
+_SIMPLIFIED_GREP = {
+    "name": "lcm_grep",
+    "description": (
+        "Search the plugin-local LCM database for past conversation content using "
+        "full-text, semantic, or hybrid retrieval. Default scope is the active session; "
+        "pass session_id to search one specific session (raw-message hits only in "
+        "broader scopes). For open-ended cross-conversation recall prefer lcm_recall; "
+        "for Hermes-tracked history outside the LCM database use session_search."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": (
+                    "Full-text query: AND by default; uppercase OR/NOT, quoted phrases, "
+                    "and term* prefixes are honoured."
+                ),
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["full_text", "semantic", "hybrid"],
+                "default": "full_text",
+                "description": (
+                    "'full_text' searches indexed terms; 'semantic' searches embedded "
+                    "summaries (degrades to full-text if unavailable); 'hybrid' fuses "
+                    "both."
+                ),
+            },
+            "limit": {
+                "type": "integer",
+                "default": 10,
+                "description": "Max results (default 10, hard upper bound 200).",
+            },
+            "sort": {
+                "type": "string",
+                "enum": ["recency", "relevance", "hybrid"],
+                "default": "recency",
+                "description": "'recency' favors newer, 'relevance' strongest FTS, 'hybrid' balances both.",
+            },
+            "session_id": {
+                "type": "string",
+                "description": (
+                    "Restrict the search to one explicit session id. Omit for the active "
+                    "session."
+                ),
+            },
+            "exclude_sessions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": [],
+                "description": "Session ids to exclude from results.",
+            },
+            "source": {
+                "type": "string",
+                "description": "Optional source/platform filter (cli, discord, telegram).",
+            },
+            "role": {
+                "type": "string",
+                "enum": ["system", "user", "assistant", "tool", "unknown"],
+                "description": "Optional raw-message role filter; returns raw hits only.",
+            },
+            "time_from": {
+                "anyOf": [{"type": "number"}, {"type": "string"}],
+                "description": "Inclusive min timestamp (Unix seconds or ISO 8601).",
+            },
+            "time_to": {
+                "anyOf": [{"type": "number"}, {"type": "string"}],
+                "description": "Inclusive max timestamp (Unix seconds or ISO 8601).",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+_SIMPLIFIED_RECALL = {
+    "name": "lcm_recall",
+    "description": (
+        "Search memory across ALL conversations and all time: semantic matching when "
+        "embeddings are enabled, full-text otherwise. Returns the most relevant memories "
+        "(summaries and verbatim excerpts) ranked by relevance/recency, each with an "
+        "expand handle (lcm_expand store_id/node_id). Not for exact text in a known time "
+        "range — use lcm_grep for that; not for full transcripts — use lcm_load_session."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": (
+                    "What to recall across conversations; distinctive phrasing recalls best."
+                ),
+            },
+            "limit": {
+                "type": "integer",
+                "default": 8,
+                "description": "Max memories (default 8, hard upper bound 25).",
+            },
+            "include": {
+                "type": "string",
+                "enum": ["all", "summaries", "verbatim"],
+                "default": "all",
+                "description": (
+                    "'all' mixes summaries and verbatim; 'summaries' only compacted "
+                    "summaries; 'verbatim' only raw excerpts."
+                ),
+            },
+            "detail": {
+                "type": "string",
+                "enum": ["snippets", "answer_ready"],
+                "default": "snippets",
+                "description": (
+                    "'snippets' compact hits; 'answer_ready' hydrates bounded evidence "
+                    "windows without another search."
+                ),
+            },
+            "exclude_sessions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": [],
+                "description": "Session ids to exclude from results.",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+_SIMPLIFIED_ASSERTIONS = {
+    "name": "lcm_assertions",
+    "description": (
+        "Query cited state across this profile's sessions. Three modes: 'query' reads "
+        "the opt-in V4 assertion sidecar for bounded, typed, source-cited facts, "
+        "preferences, commitments, actions, or status (every row carries an exact "
+        "store_id, span, and quote; conflicts are preserved); 'lookup' reads cited "
+        "entity mentions for a name and aliases, optionally ranked for a question; "
+        "'list' lists assertion subjects. Default off; no writes or model calls."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "mode": {
+                "type": "string",
+                "enum": ["query", "lookup", "list"],
+                "description": (
+                    "'query' needs subject_key; 'lookup' needs name; 'list' lists "
+                    "assertion subjects."
+                ),
+            },
+            "subject_key": {
+                "type": "string",
+                "description": (
+                    "Query mode. Canonical assertion subject, e.g. user:self, "
+                    "person:alex, project:apollo."
+                ),
+            },
+            "predicate_key": {
+                "type": "string",
+                "description": "Query mode. Optional canonical lowercase dotted predicate filter.",
+            },
+            "kinds": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "fact",
+                        "event",
+                        "preference",
+                        "recommendation",
+                        "commitment",
+                        "action",
+                        "status",
+                        "quotation",
+                    ],
+                },
+                "description": "Query mode. Optional assertion-kind filter.",
+            },
+            "name": {
+                "type": "string",
+                "description": "Lookup mode. Entity name to look up (required for lookup).",
+            },
+            "aliases": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 8,
+                "description": "Lookup mode. Alternative names/aliases.",
+            },
+            "question": {
+                "type": "string",
+                "description": "Lookup mode. Optional question to rank mentions for.",
+            },
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "description": (
+                    "Query: default 25, cap 50. Lookup: default 20, cap 50. List: "
+                    "default 50, cap 200."
+                ),
+            },
+        },
+        "required": ["mode"],
+    },
+}
+
+_SIMPLIFIED_EVIDENCE = {
+    "name": "lcm_evidence",
+    "description": (
+        "Build a bounded, source-grounded evidence brief from baseline exact LCM refs. "
+        "Two modes: pack (default) hydrates exact source spans, validates facets, and "
+        "emits a canonical lcm_compute trace; compile (pass 'proposal') validates one "
+        "provider-neutral semantic proposal or deterministically compiles answer "
+        "requirements. Product code validates every quote, span, value, unit, key, and "
+        "source against immutable stored evidence. Returns structured states only — "
+        "never final prose."
+    ),
+    "parameters": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "question": {"type": "string", "minLength": 1},
+            "question_date": {
+                "type": "string",
+                "description": "Optional calendar-date/as-of anchor.",
+            },
+            "baseline_refs": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 50,
+                "items": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {
+                            "type": "object",
+                            "additionalProperties": True,
+                            "required": ["exact_ref"],
+                            "properties": {
+                                "exact_ref": {"type": "string"},
+                                "store_id": {"type": "integer"},
+                                "span_start": {"type": "integer"},
+                                "span_end": {"type": "integer"},
+                                "quote": {"type": "string"},
+                                "value": {
+                                    "anyOf": [
+                                        {"type": "number"},
+                                        {"type": "string"},
+                                        {"type": "null"},
+                                    ]
+                                },
+                                "unit": {"type": "string"},
+                                "key": {"type": "string"},
+                                "label": {"type": "string"},
+                            },
+                        },
+                    ]
+                },
+            },
+            "proposal": {
+                "type": "object",
+                "description": (
+                    "Compile mode only. A provider-neutral semantic proposal with "
+                    "version, selections, and missing_facets. Omit for pack mode."
+                ),
+                "additionalProperties": False,
+                "required": ["version", "selections", "missing_facets"],
+                "properties": {
+                    "version": {"type": "string", "enum": ["evidence-selector-v1"]},
+                    "requested_facets": {
+                        "type": "array",
+                        "maxItems": 12,
+                        "items": {"type": "string"},
+                    },
+                    "selections": {
+                        "type": "array",
+                        "maxItems": 50,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["claim_id", "facet", "exact_ref", "quote"],
+                            "properties": {
+                                "claim_id": {"type": "string"},
+                                "facet": {"type": "string"},
+                                "exact_ref": {"type": "string"},
+                                "quote": {"type": "string"},
+                                "entity": {"type": "string"},
+                                "date": {"type": "string"},
+                                "value": {
+                                    "anyOf": [
+                                        {"type": "number"},
+                                        {"type": "string"},
+                                        {"type": "null"},
+                                    ]
+                                },
+                                "unit": {"type": "string"},
+                                "distinct_key": {"type": "string"},
+                                "label": {"type": "string"},
+                                "role": {"type": "string"},
+                                "source": {"type": "string"},
+                            },
+                        },
+                    },
+                    "missing_facets": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+            },
+            "persist_view": {
+                "type": "boolean",
+                "default": False,
+                "description": (
+                    "Compile mode only. Persist validated high-value evidence as an "
+                    "exact-dependency query view in the same lcm.db."
+                ),
+            },
+        },
+        "required": ["question", "baseline_refs"],
+    },
+}
+
+_SIMPLIFIED_EXPAND = {
+    "name": "lcm_expand",
+    "description": (
+        "Recover detail behind a summary node, externalized payload, raw message, or a "
+        "free-text query. Recover modes (exactly one of node_id / store_id / "
+        "externalized_ref): node_id expands the sources compacted into a summary node; "
+        "store_id fetches one raw message across sessions; externalized_ref reads a "
+        "stored payload. Query mode (pass 'query'): retrieve expanded context matching "
+        "the query and synthesize a bounded answer (output='answer') or return the "
+        "serialized context without an LLM call (output='evidence'). Output is bounded "
+        "by max_tokens; raw recovery is pageable via content_offset."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "node_id": {
+                "type": "integer",
+                "description": (
+                    "Summary node to expand. Omit session_id for the active session, or "
+                    "pass a matching session_id for cross-session expansion."
+                ),
+            },
+            "store_id": {
+                "type": "integer",
+                "description": (
+                    "Raw message store_id to fetch; works across sessions. Content is "
+                    "paged by content_offset."
+                ),
+            },
+            "externalized_ref": {
+                "type": "string",
+                "description": "Externalized payload ref filename to expand.",
+            },
+            "session_id": {
+                "type": "string",
+                "description": (
+                    "Optional explicit session for node_id/externalized_ref mode. "
+                    "Rejected with store_id."
+                ),
+            },
+            "query": {
+                "type": "string",
+                "description": (
+                    "Query mode. Search query to find candidate summaries/messages to "
+                    "expand; used as the answer prompt."
+                ),
+            },
+            "session_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 1,
+                "maxItems": 20,
+                "description": "Query mode. Optional explicit session ids (omit for active).",
+            },
+            "output": {
+                "type": "string",
+                "enum": ["answer", "evidence"],
+                "default": "answer",
+                "description": (
+                    "Query mode. 'answer' runs bounded synthesis; 'evidence' returns "
+                    "serialized context without an LLM call."
+                ),
+            },
+            "max_tokens": {
+                "type": "integer",
+                "default": 4000,
+                "description": "Token budget for returned content (default 4000).",
+            },
+            "content_offset": {
+                "type": "integer",
+                "default": 0,
+                "description": "Character offset to continue an oversized payload/message.",
+            },
+        },
+        "required": [],
+    },
+}
+
+_SIMPLIFIED_LOAD_SESSION = {
+    "name": "lcm_load_session",
+    "description": (
+        "Load an ordered raw-message transcript page for one session_id. This is "
+        "enumeration, not search: no query needed, returns raw content ordered by "
+        "store_id. Use after lcm_grep/session_search identified a session. Bounded by "
+        "limit and max_content_chars; paginate with after_store_id."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "session_id": {
+                "type": "string",
+                "description": "Explicit LCM session id to load (required).",
+            },
+            "limit": {
+                "type": "integer",
+                "default": 100,
+                "description": "Max raw messages (default 100, cap 200).",
+            },
+            "max_content_chars": {
+                "type": "integer",
+                "default": 4000,
+                "description": "Max content chars per message (default 4000, cap 20000).",
+            },
+            "after_store_id": {
+                "type": "integer",
+                "default": 0,
+                "description": "Exclusive pagination cursor; pass the previous next_cursor.",
+            },
+            "roles": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional role filter, e.g. ['user', 'assistant', 'tool'].",
+            },
+            "time_from": {
+                "type": "number",
+                "description": "Inclusive min message timestamp (Unix seconds).",
+            },
+            "time_to": {
+                "type": "number",
+                "description": "Inclusive max message timestamp (Unix seconds).",
+            },
+        },
+        "required": ["session_id"],
+    },
+}
+
+_SIMPLIFIED_DIAGNOSTICS = {
+    "name": "lcm_diagnostics",
+    "description": (
+        "LCM engine diagnostics, one of three actions: 'status' gives a quick health "
+        "overview (compression count, store size, DAG depth, context usage, config, "
+        "filter state, rotate snapshot); 'inspect' reads read-only session metadata "
+        "(lineage, frontier/fresh tail, compaction frontier, externalized refs, matched "
+        "patterns); 'doctor' checks database integrity, orphaned DAG nodes, and config. "
+        "Use for health/troubleshooting only — use lcm_grep/lcm_load_session/lcm_expand "
+        "for actual content."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["status", "inspect", "doctor"],
+                "description": "Which diagnostic to run.",
+            },
+            "limit": {
+                "type": "integer",
+                "default": 20,
+                "description": "Max rows/items for bounded sections (inspect). Default 20, capped at 200.",
+            },
+            "repair_action": {
+                "type": "string",
+                "enum": ["repair_level3"],
+                "description": (
+                    "Doctor-only. repair_level3: read-only scan for level 3 truncation "
+                    "fragments and condensed summary nodes; returns at most 50 of each "
+                    "with next_cursor. Writes nothing."
+                ),
+            },
+            "cursor": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Doctor repair_level3 offset; use next_cursor from the previous page.",
+            },
+        },
+        "required": ["action"],
+    },
+}
+
+# Container keyed by public tool name. Reuses the unchanged OFF-mode schemas for
+# lcm_compute / lcm_recent / lcm_describe verbatim.
+SIMPLIFIED_SCHEMAS = {
+    "lcm_grep": _SIMPLIFIED_GREP,
+    "lcm_recall": _SIMPLIFIED_RECALL,
+    "lcm_assertions": _SIMPLIFIED_ASSERTIONS,
+    "lcm_compute": LCM_COMPUTE,
+    "lcm_evidence": _SIMPLIFIED_EVIDENCE,
+    "lcm_recent": LCM_RECENT,
+    "lcm_load_session": _SIMPLIFIED_LOAD_SESSION,
+    "lcm_describe": LCM_DESCRIBE,
+    "lcm_expand": _SIMPLIFIED_EXPAND,
+    "lcm_diagnostics": _SIMPLIFIED_DIAGNOSTICS,
+}

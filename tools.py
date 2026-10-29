@@ -5798,3 +5798,86 @@ def lcm_doctor(args: Dict[str, Any], **kwargs) -> str:
         "checks": checks,
         "guidance": doctor_guidance_for_checks(checks),
     })
+
+
+# =============================================================================
+# Simplified-schema dispatchers (gated by LCM_SIMPLIFIED_TOOL_SCHEMAS).
+# Thin wrappers that map the consolidated/reduced parameter sets onto the
+# existing handlers above. They only run when the simplified registry is active.
+# =============================================================================
+
+
+def lcm_diagnostics(args: Dict[str, Any], **kwargs) -> str:
+    """Route status/inspect/doctor to their existing handlers."""
+    action = str(args.get("action") or "status").strip().lower()
+    if action == "doctor":
+        doctor_args: Dict[str, Any] = {}
+        repair = args.get("repair_action")
+        if repair:
+            doctor_args["action"] = repair
+        if args.get("cursor") is not None:
+            doctor_args["cursor"] = args["cursor"]
+        return lcm_doctor(doctor_args, **kwargs)
+    if action == "inspect":
+        return lcm_inspect({"limit": args.get("limit", 20)}, **kwargs)
+    return lcm_status({}, **kwargs)
+
+
+def lcm_evidence_unified(args: Dict[str, Any], **kwargs) -> str:
+    """Compile mode when 'proposal' is present, otherwise pack mode."""
+    if args.get("proposal"):
+        compile_args = {
+            k: v for k, v in args.items()
+            if k in ("question", "question_date", "baseline_refs", "proposal", "persist_view", "budgets")
+        }
+        return lcm_compile_evidence(compile_args, **kwargs)
+    pack_args = {
+        k: v for k, v in args.items()
+        if k in ("question", "question_date", "baseline_refs", "budgets")
+    }
+    return lcm_evidence_pack(pack_args, **kwargs)
+
+
+def lcm_assertions_unified(args: Dict[str, Any], **kwargs) -> str:
+    """query -> lcm_query_state; lookup/list -> lcm_memory."""
+    mode = str(args.get("mode") or "").strip().lower()
+    if mode == "query":
+        qs_args = {k: v for k, v in args.items() if k in ("subject_key", "predicate_key", "kinds", "limit")}
+        return lcm_query_state(qs_args, **kwargs)
+    mem_args: Dict[str, Any] = {"action": mode}
+    for k in ("name", "aliases", "question", "limit"):
+        if args.get(k) is not None:
+            mem_args[k] = args[k]
+    return lcm_memory(mem_args, **kwargs)
+
+
+def lcm_expand_unified(args: Dict[str, Any], **kwargs) -> str:
+    """Query mode when 'query' is present, otherwise direct recovery."""
+    if args.get("query"):
+        eq_args = {k: v for k, v in args.items() if k in ("query", "session_ids", "output", "max_tokens")}
+        eq_args["prompt"] = args["query"]
+        return lcm_expand_query(eq_args, **kwargs)
+    ex_args = {
+        k: v for k, v in args.items()
+        if k in ("node_id", "store_id", "externalized_ref", "session_id", "max_tokens", "content_offset")
+    }
+    return lcm_expand(ex_args, **kwargs)
+
+
+def lcm_grep_simplified(args: Dict[str, Any], **kwargs) -> str:
+    """Map session_id -> session_scope='session', exclude_sessions -> exclude_session_ids."""
+    g_args = {k: v for k, v in args.items() if k in ("query", "mode", "limit", "sort", "source", "role", "time_from", "time_to")}
+    if args.get("session_id"):
+        g_args["session_scope"] = "session"
+        g_args["session_id"] = args["session_id"]
+    if args.get("exclude_sessions"):
+        g_args["exclude_session_ids"] = args["exclude_sessions"]
+    return lcm_grep(g_args, **kwargs)
+
+
+def lcm_recall_simplified(args: Dict[str, Any], **kwargs) -> str:
+    """Map exclude_sessions -> exclude_session_ids."""
+    r_args = {k: v for k, v in args.items() if k in ("query", "limit", "include", "detail")}
+    if args.get("exclude_sessions"):
+        r_args["exclude_session_ids"] = args["exclude_sessions"]
+    return lcm_recall(r_args, **kwargs)
