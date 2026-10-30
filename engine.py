@@ -9977,7 +9977,6 @@ class LCMEngine(
         # repair; on merging hosts the joined blob stays the default.
         _per_node = (
             self._config.per_node_emission
-            and retained_user_msg is None
             and _host_keeps_lcm_summary_rows_unmerged()
         )
         # #653: (selection group, node id) per part; the anchor goes first, then each depth, deepest first.

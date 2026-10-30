@@ -11579,6 +11579,35 @@ class TestEngineCompress:
         assert [dict(m) for m in summaries] == [dict(m) for m in summaries2[:2]], \
             "stable prefix messages must be byte-identical across reassembly"
 
+    def test_assemble_context_per_node_with_retained_user_anchor(self, engine, monkeypatch):
+        """Per-node emission must NOT fall back to a joined blob when a retained
+        user anchor (preserved objective) is present.
+
+        Regression: the gate included ``retained_user_msg is None``, so any
+        session with a preserved objective concatenated every frontier node
+        into one blob, defeating the per-node prompt-cache benefit.
+        """
+        engine._config.per_node_emission = True
+        monkeypatch.setattr(lcm_engine, "_host_keeps_lcm_summary_rows_unmerged", lambda: True)
+        for content, created in (("alpha frontier summary", 1.0), ("bravo frontier summary", 2.0)):
+            engine._dag.add_node(SummaryNode(
+                session_id=engine._session_id, depth=0, summary=content, token_count=30,
+                source_token_count=4000, source_ids=[], source_type="messages", created_at=created,
+            ))
+        system_msg = {"role": "system", "content": "You are an agent."}
+        tail = [{"role": "user", "content": "do the thing"}, {"role": "assistant", "content": "working"}]
+        anchor = {"role": "user", "content": "[Preserved Objective] keep this goal in view"}
+
+        result = engine._assemble_context(system_msg, tail, retained_user_message=anchor)
+
+        summaries = [m for m in result if isinstance(m.get("content"), str) and "frontier summary" in m["content"]]
+        assert len(summaries) == 2, f"expected one message per node with an anchor, got {len(summaries)}"
+        assert not any("alpha" in m["content"] and "bravo" in m["content"] for m in summaries), \
+            "frontier nodes must not be concatenated when a retained user anchor is present"
+        # The anchor itself stays its own message, not folded into the summary prefix.
+        anchors = [m for m in result if isinstance(m.get("content"), str) and "Preserved Objective" in m["content"]]
+        assert len(anchors) == 1
+
     def test_assemble_context_joined_blob_is_the_default(self, engine):
         """Per-node emission is default-off: two frontier nodes stay one joined blob.
 
