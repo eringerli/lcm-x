@@ -5866,7 +5866,7 @@ def lcm_expand_unified(args: Dict[str, Any], **kwargs) -> str:
 
 def lcm_grep_simplified(args: Dict[str, Any], **kwargs) -> str:
     """Map session_id -> session_scope='session', exclude_sessions -> exclude_session_ids."""
-    g_args = {k: v for k, v in args.items() if k in ("query", "mode", "limit", "sort", "source", "role", "time_from", "time_to")}
+    g_args = {k: v for k, v in args.items() if k in ("query", "mode", "limit", "sort", "source", "role", "time_from", "time_to", "content_scope", "externalized_refs")}
     if args.get("session_id"):
         g_args["session_scope"] = "session"
         g_args["session_id"] = args["session_id"]

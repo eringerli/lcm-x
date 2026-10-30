@@ -169,6 +169,17 @@ names) hides any tool, including a flag-enabled one, and refuses direct calls.
 Calls through a cached dormant schema retain the existing disabled response.
 The manifest continues to declare all 16 tools.
 
+`LCM_SIMPLIFIED_TOOL_SCHEMAS=true` swaps the advertised set for a simplified
+registry: 10 tools (9 active, plus `lcm_assertions` when
+`LCM_ASSERTIONS_ENABLED` is on) that merge the original tools behind routing
+parameters — `lcm_diagnostics` (`action`: status/inspect/doctor),
+`lcm_evidence` (`proposal` present = compile mode), `lcm_assertions` (`mode`:
+query/lookup/list), and `lcm_expand` (`query` present = query mode) — and
+reduce `lcm_grep` (15→12 parameters) and `lcm_recall` (9→5). All routes call
+the same existing handlers, so behavior is identical to the full set;
+`simplified_tool_schemas` is default off and requires a restart, like the other
+loaded process flags.
+
 ### Recall ranking
 
 - `LCM_RECALL_ARM_WEIGHTS` (default `fts=0.5,summary=1.0,chunk=1.0`): per-arm RRF weights for `lcm_recall`; see [docs/retrieval-tools.md](https://github.com/electricsheephq/lcm-x/blob/main/docs/retrieval-tools.md).
@@ -256,6 +267,7 @@ warns without changing its behavior until removal.
 | `LCM_ASSERTIONS_ENABLED` | `bool` | `false` | — | — |
 | `LCM_QUERY_VIEWS_ENABLED` | `bool` | `false` | — | — |
 | `LCM_ADAPTIVE_RETRIEVAL_ENABLED` | `bool` | `false` | — | — |
+| `LCM_SIMPLIFIED_TOOL_SCHEMAS` | `bool` | `false` | — | — |
 | `LCM_ASSERTION_EXTRACTION_ENABLED` | `bool` | `false` | — | — |
 | `LCM_ASSERTION_EXTRACTION_MODEL` | `str` | `""` | — | — |
 | `LCM_ASSERTION_EXTRACTION_MAX_SOURCES_PER_PASS` | `int` | `4` | — | — |
@@ -273,6 +285,7 @@ warns without changing its behavior until removal.
 | `LCM_SUMMARY_MODEL` | `str` | `""` | — | — |
 | `LCM_NATIVE_RECOVERY` | `bool` | `false` | — | — |
 | `LCM_SURVIVAL_FIT` | `bool` | `true` | — | — |
+| `LCM_PER_NODE_EMISSION` | `bool` | `false` | — | — |
 | `LCM_SURVIVAL_RESERVE` | `float` | `0.15` | `>= 0.0`, `<= 0.9` | — |
 | `LCM_SUMMARY_CIRCUIT_BREAKER_FAILURE_THRESHOLD` | `int` | `2` | — | — |
 | `LCM_SUMMARY_CIRCUIT_BREAKER_COOLDOWN_SECONDS` | `int` | `300` | — | — |

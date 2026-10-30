@@ -1327,6 +1327,27 @@ _SIMPLIFIED_GREP = {
                 "default": "recency",
                 "description": "'recency' favors newer, 'relevance' strongest FTS, 'hybrid' balances both.",
             },
+            "content_scope": {
+                "type": "string",
+                "enum": ["history", "externalized", "both"],
+                "default": "history",
+                "description": (
+                    "Content stores to search. 'history' (default) = raw messages + summaries. "
+                    "'externalized'/'both' also search bounded externalized-payload prefixes owned by "
+                    "the active session (e.g. 'Externalized tool output ... ref=R' stubs). "
+                    "Externalized search supports the active session only."
+                ),
+            },
+            "externalized_refs": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 256,
+                "description": (
+                    "Optional externalized ref filenames to search. Valid only with "
+                    "content_scope='externalized' or 'both'. Every ref must be a regular payload "
+                    "owned by the active session."
+                ),
+            },
             "session_id": {
                 "type": "string",
                 "description": (
